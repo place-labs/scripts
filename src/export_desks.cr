@@ -55,6 +55,7 @@ puts "================================="
 puts "writing desk metadata..."
 
 desk_count = 0
+level_count = 0
 
 # Array(NamedTuple(zone: API::Models::Zone, metadata: Hash(String, API::Models::Metadata)))
 levels = client.metadata.children(building_zone, "desks")
@@ -74,16 +75,17 @@ File.open(csv_file, "w") do |file|
 
       level_name = zone.name
       level_display_name = zone.display_name || ""
-
-      desk_count += 1
+      level_count += 1
 
       desks.each do |desk|
         desk_id = desk["id"].as_s
-        map_id = desk["map_id"].as_s? || desk_id
-        desk_name = desk["name"].as_s? || desk_id
-        security_group = desk["security"].as_s? || ""
-        assigned_email = desk["assigned_to"].as_s? || ""
-        assigned_name = desk["assigned_name"].as_s? || ""
+        map_id = desk["map_id"]?.try(&.as_s?) || desk_id
+        desk_name = desk["name"]?.try(&.as_s?) || desk_id
+        security_group = desk["security"]?.try(&.as_s?) || ""
+        assigned_email = desk["assigned_to"]?.try(&.as_s?) || ""
+        assigned_name = desk["assigned_name"]?.try(&.as_s?) || ""
+
+        desk_count += 1
 
         csv.row building_name, build_display_name, level_name, level_display_name, desk_id, map_id, desk_name, security_group, assigned_email, assigned_name
       end
@@ -95,5 +97,5 @@ puts "================================="
 puts "COMPLETE"
 puts "================================="
 
-puts "output #{levels.size} levels"
+puts "output #{level_count} levels"
 puts "       #{desk_count} desks"
