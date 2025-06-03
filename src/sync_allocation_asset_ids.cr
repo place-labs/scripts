@@ -81,7 +81,7 @@ response = HTTP::Client.get(request, headers: HTTP::Headers{
 })
 raise "error #{response.status_code}, #{response.body}" unless response.success?
 bookings = JSON.parse(response.body).as_a
-bookings.select! { |booking| booking["recurrence_type"].as_s? == "daily" && booking["recurrence_end"]?.try(&.as_i64?).nil? }
+bookings.select! { |booking| booking["recurrence_type"].as_s? == "daily" && booking["recurrence_end"]?.try(&.as_i64?).nil? && booking["booking_type"].as_s == "desk" }
 
 # find all the missing assignments or incorrect assignments
 missing = {} of String => DeskDetails
@@ -117,6 +117,34 @@ assignments.each do |desk_id, details|
   end
 end
 
+# remove bookings that shouldn't exist
+removed_dangling = 0
+bookings.each do |booking|
+  asset_id = booking["asset_id"].as_s
+  if assignments[asset_id]?.nil?
+    booking_id = booking["id"].as_i64
+    booking_email = booking["user_email"].as_s.strip.downcase
+
+    # this is an incorrect booking, we should delete it
+    # then we can add the current assignment to missing
+    request = URI.new("https", domain, 443, "/api/staff/v1/bookings/#{booking_id}")
+    response = HTTP::Client.delete(request, headers: HTTP::Headers{
+      "X-API-Key" => api_key,
+      # "Host" => domain,
+    })
+
+    if !response.success?
+      puts "  - failed to delete: #{booking_id} owned by #{booking_email}"
+      puts "error: #{response.status_code}\n#{response.body}"
+      raise "fatal, exiting due to cleanup error"
+    end
+
+    removed_dangling += 1
+    deleted[booking_id] = booking_email
+  end
+end
+
+puts "found #{removed_dangling} dangling bookings" unless removed_dangling.zero?
 puts "checked #{assignments.size} assignments against #{bookings.size} bookings"
 puts "failed to remove #{failed} bookings" unless failed.zero?
 puts "removed #{deleted.size} incorrect assignments"
